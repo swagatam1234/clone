@@ -1,0 +1,57 @@
+version: 2.1
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:18.16  # Use an appropriate Node.js version
+
+jobs:
+  build:
+    executor: node-executor
+    steps:
+      - checkout
+      - run:
+          name: Install Dependencies
+          command: npm install
+      - run:
+          name: Run Linting (ESLint)
+          command: |
+            npm install -g eslint
+            eslint .  # Run linting
+      - run:
+          name: Run Tests
+          command: npm test  # Ensure you have a test script in package.json
+
+  deploy:
+    executor: node-executor
+    steps:
+      - checkout
+      - run:
+          name: Install SSH Client
+          command: sudo apt update && sudo apt install -y openssh-client
+      - add_ssh_keys:
+          fingerprints:
+            - "your_ssh_key_fingerprint"  # Add your SSH key to CircleCI
+      - run:
+          name: Deploy to AWS EC2
+          command: |
+            echo "Deploying to EC2..."
+            scp -o StrictHostKeyChecking=no -r * ubuntu@$EC2_HOST:/var/www/html/
+            ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+              cd /var/www/html
+              npm install
+              pm2 restart app.js  # Replace 'app.js' with your entry file
+              exit
+            EOF
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main  # Deploy only from the main branch
